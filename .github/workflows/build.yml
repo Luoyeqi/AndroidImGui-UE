@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         abi: [arm64-v8a, armeabi-v7a, x86_64]
-      fail-fast: false  # 不因一个失败而取消其他任务
+      fail-fast: false
 
     steps:
     - name: Checkout code
@@ -34,33 +34,24 @@ jobs:
       run: |
         echo "=== NDK Information ==="
         echo "ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
-        echo "Environment NDK: ${{ env.ANDROID_NDK }}"
-        
-        # 检查 toolchain 文件
         if [ -f "$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" ]; then
           echo "✓ Toolchain file found at ANDROID_NDK_HOME"
+        else
+          echo "✗ Toolchain file NOT found at ANDROID_NDK_HOME"
+          exit 1
         fi
-        
-        if [ -f "${{ env.ANDROID_NDK }}/build/cmake/android.toolchain.cmake" ]; then
-          echo "✓ Toolchain file found at ANDROID_NDK env var"
-        fi
-        
-        echo "=== CMake version ==="
         cmake --version
-        
-        echo "=== Ninja version ==="
         ninja --version
 
     - name: Configure CMake
       run: |
         mkdir -p build
         cd build
-        
         cmake -G "Ninja" \
           -DANDROID_ABI=${{ matrix.abi }} \
           -DANDROID_PLATFORM=android-24 \
           -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_TOOLCHAIN_FILE=${{ env.ANDROID_NDK }}/build/cmake/android.toolchain.cmake \
+          -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
           -DCMAKE_MAKE_PROGRAM=$(which ninja) \
           ..
 
@@ -72,14 +63,12 @@ jobs:
     - name: Verify Build Output
       run: |
         BUILD_OUTPUT="build/libs/${{ matrix.abi }}/libProject.so"
-        
         if [ -f "$BUILD_OUTPUT" ]; then
           echo "✓ Build successful!"
           ls -lh "$BUILD_OUTPUT"
           file "$BUILD_OUTPUT"
         else
           echo "✗ Build failed! libProject.so not found"
-          echo "Contents of build directory:"
           find build -type f -name "*.so" 2>/dev/null || echo "No .so files found"
           exit 1
         fi
@@ -100,7 +89,6 @@ jobs:
         path: build/
         retention-days: 7
 
-  # 汇总报告
   summary:
     runs-on: ubuntu-latest
     needs: build
